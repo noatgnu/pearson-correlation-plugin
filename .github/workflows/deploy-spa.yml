@@ -1,0 +1,105 @@
+name: Build SPA and Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+env:
+  CAULDRON_VERSION: "master"
+  PYODIDE_VERSION: "0.29.3"
+
+jobs:
+  build-spa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v4
+
+      - name: Checkout CauldronGO
+        uses: actions/checkout@v4
+        with:
+          repository: noatgnu/cauldron-go
+          ref: ${{ env.CAULDRON_VERSION }}
+          path: cauldron-go
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build shared-lib
+        working-directory: cauldron-go/shared-lib
+        run: |
+          npm install
+          npm run build
+
+      - name: Build plugin-to-spa
+        working-directory: cauldron-go
+        run: go build -o ../plugin-to-spa ./cmd/plugin-to-spa/
+
+      - name: Generate SPA
+        run: |
+          ./plugin-to-spa \
+            --plugin ./plugin.yaml \
+            --output ./spa \
+            --skip-check \
+            --no-build \
+            --pyodide-version ${{ env.PYODIDE_VERSION }} \
+            --spa-template ./cauldron-go/spa-template \
+            --shared-lib-path /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/cauldron-go/shared-lib/dist/cauldron-forms \
+            --examples-dir ./examples:./cauldron-go/examples
+
+      - name: Install SPA dependencies
+        working-directory: spa
+        run: npm install
+
+      - name: Run unit tests
+        working-directory: spa
+        run: npm run test:ci
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+
+      - name: Run integration tests with example
+        working-directory: spa
+        run: npm run test:ci:integration
+        continue-on-error: false
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+
+      - name: Generate lock file and build SPA
+        working-directory: spa
+        run: npm run build:ci -- --base-href /${{ github.event.repository.name }}/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './spa/dist/browser'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build-spa
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
