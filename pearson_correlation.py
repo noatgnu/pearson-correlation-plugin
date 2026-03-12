@@ -251,7 +251,7 @@ def generate_volcano_plot(
 
     fig.update_layout(
         xaxis_title='Pearson Correlation',
-        yaxis_title='-log₁₀(P-value)',
+        yaxis_title='-log10(P-value)',
         template='plotly_white',
         width=900,
         height=700
