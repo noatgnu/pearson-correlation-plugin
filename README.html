@@ -170,6 +170,14 @@
 <td>Always visible</td>
 </tr>
 <tr>
+<td><code>grouping_col</code></td>
+<td>Grouping Column</td>
+<td>text</td>
+<td>No</td>
+<td></td>
+<td>Always visible</td>
+</tr>
+<tr>
 <td><code>imputation</code></td>
 <td>Imputation Method</td>
 <td>select (none, mean, median, zero, knn)</td>
@@ -201,54 +209,6 @@
 <td>false</td>
 <td>Always visible</td>
 </tr>
-<tr>
-<td><code>cluster_method</code></td>
-<td>Clustering Method</td>
-<td>select (none, kmeans, dbscan)</td>
-<td>No</td>
-<td>none</td>
-<td>Always visible</td>
-</tr>
-<tr>
-<td><code>auto_k</code></td>
-<td>Auto-detect Cluster Count</td>
-<td>boolean</td>
-<td>No</td>
-<td>false</td>
-<td>Visible when <code>cluster_method</code> = <code>kmeans</code></td>
-</tr>
-<tr>
-<td><code>n_clusters</code></td>
-<td>Number of Clusters</td>
-<td>number (min: 2, max: 20, step: 1)</td>
-<td>No</td>
-<td>5</td>
-<td>Visible when <code>cluster_method</code> = <code>kmeans</code></td>
-</tr>
-<tr>
-<td><code>max_k</code></td>
-<td>Max Clusters to Test</td>
-<td>number (min: 3, max: 30, step: 1)</td>
-<td>No</td>
-<td>10</td>
-<td>Visible when <code>auto_k</code> = <code>true</code></td>
-</tr>
-<tr>
-<td><code>dbscan_eps</code></td>
-<td>DBSCAN Epsilon</td>
-<td>number (min: 0, max: 10, step: 0)</td>
-<td>No</td>
-<td>0.5</td>
-<td>Visible when <code>cluster_method</code> = <code>dbscan</code></td>
-</tr>
-<tr>
-<td><code>dbscan_min_samples</code></td>
-<td>DBSCAN Min Samples</td>
-<td>number (min: 2, max: 50, step: 1)</td>
-<td>No</td>
-<td>5</td>
-<td>Visible when <code>cluster_method</code> = <code>dbscan</code></td>
-</tr>
 </tbody>
 </table>
 <h3 id="input-details">Input Details</h3>
@@ -263,6 +223,8 @@
 </ul>
 <h4 id="target-column-target-col">Target Column (<code>target_col</code>)</h4>
 <p>Numeric column name from annotation to correlate with.</p>
+<h4 id="grouping-column-grouping-col">Grouping Column (<code>grouping_col</code>)</h4>
+<p>Column from annotation to group samples for separate volcano plots per group.</p>
 <h4 id="imputation-method-imputation">Imputation Method (<code>imputation</code>)</h4>
 <p>Method for handling missing values. Select 'none' if data is pre-imputed.</p>
 <ul>
@@ -274,21 +236,6 @@
 <p>Significance threshold for FDR correction.</p>
 <h4 id="log2-transform-data-log2-transform">Log2 Transform Data (<code>log2_transform</code>)</h4>
 <p>Apply log2 transformation to the data before correlation analysis.</p>
-<h4 id="clustering-method-cluster-method">Clustering Method (<code>cluster_method</code>)</h4>
-<p>Method to cluster proteins based on correlation values.</p>
-<ul>
-<li><strong>Options</strong>: <code>none</code>, <code>kmeans</code>, <code>dbscan</code></li>
-</ul>
-<h4 id="auto-detect-cluster-count-auto-k">Auto-detect Cluster Count (<code>auto_k</code>)</h4>
-<p>Automatically determine optimal number of clusters using elbow method.</p>
-<h4 id="number-of-clusters-n-clusters">Number of Clusters (<code>n_clusters</code>)</h4>
-<p>Number of clusters for KMeans clustering.</p>
-<h4 id="max-clusters-to-test-max-k">Max Clusters to Test (<code>max_k</code>)</h4>
-<p>Maximum number of clusters to test for elbow method.</p>
-<h4 id="dbscan-epsilon-dbscan-eps">DBSCAN Epsilon (<code>dbscan_eps</code>)</h4>
-<p>Maximum distance for DBSCAN neighborhood.</p>
-<h4 id="dbscan-min-samples-dbscan-min-samples">DBSCAN Min Samples (<code>dbscan_min_samples</code>)</h4>
-<p>Minimum samples for DBSCAN core points.</p>
 <h2 id="outputs">Outputs</h2>
 <table>
 <thead>
@@ -322,13 +269,6 @@
 <td>html</td>
 <td>Volcano plot showing correlation vs significance.</td>
 </tr>
-<tr>
-<td><code>cluster_plot</code></td>
-<td><code>cluster_plot.html</code></td>
-<td>html</td>
-<td>html</td>
-<td>Cluster plot showing proteins grouped by correlation clusters.</td>
-</tr>
 </tbody>
 </table>
 <h2 id="sample-annotation">Sample Annotation</h2>
@@ -356,16 +296,14 @@
 </blockquote>
 <h2 id="example-data">Example Data</h2>
 <p>This plugin includes example data for testing:</p>
-<pre><code class="language-yaml">  input_file: diann/imputed.data.txt
+<pre><code class="language-yaml">  log2_transform: true
+  input_file: diann/imputed.data.txt
   annotation_file: diann/annotation_with_score.txt
-  alpha: 0.05
-  log2_transform: true
-  auto_k: true
-  max_k: 6
   index_col: Protein.Group
   target_col: Score
+  grouping_col: Condition
   imputation: mean
-  cluster_method: kmeans
+  alpha: 0.05
 </code></pre>
 <p>Load example data by clicking the <strong>Load Example</strong> button in the UI.</p>
 <h2 id="usage">Usage</h2>

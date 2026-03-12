@@ -23,16 +23,11 @@ Calculate Pearson correlation between protein abundance and a target variable wi
 | `annotation_file` | Sample Annotation File | file | Yes | - | Always visible |
 | `index_col` | Index Column | column-selector (single) | Yes | - | Always visible |
 | `target_col` | Target Column | text | Yes | - | Always visible |
+| `grouping_col` | Grouping Column | text | No |  | Always visible |
 | `imputation` | Imputation Method | select (none, mean, median, zero, knn) | No | none | Always visible |
 | `knn_neighbors` | KNN Neighbors | number (min: 1, max: 20, step: 1) | No | 5 | Visible when `imputation` = `knn` |
 | `alpha` | Significance Level | number (min: 0, max: 0, step: 0) | No | 0.05 | Always visible |
 | `log2_transform` | Log2 Transform Data | boolean | No | false | Always visible |
-| `cluster_method` | Clustering Method | select (none, kmeans, dbscan) | No | none | Always visible |
-| `auto_k` | Auto-detect Cluster Count | boolean | No | false | Visible when `cluster_method` = `kmeans` |
-| `n_clusters` | Number of Clusters | number (min: 2, max: 20, step: 1) | No | 5 | Visible when `cluster_method` = `kmeans` |
-| `max_k` | Max Clusters to Test | number (min: 3, max: 30, step: 1) | No | 10 | Visible when `auto_k` = `true` |
-| `dbscan_eps` | DBSCAN Epsilon | number (min: 0, max: 10, step: 0) | No | 0.5 | Visible when `cluster_method` = `dbscan` |
-| `dbscan_min_samples` | DBSCAN Min Samples | number (min: 2, max: 50, step: 1) | No | 5 | Visible when `cluster_method` = `dbscan` |
 
 ### Input Details
 
@@ -57,6 +52,11 @@ Column containing protein identifiers.
 Numeric column name from annotation to correlate with.
 
 
+#### Grouping Column (`grouping_col`)
+
+Column from annotation to group samples for separate volcano plots per group.
+
+
 #### Imputation Method (`imputation`)
 
 Method for handling missing values. Select 'none' if data is pre-imputed.
@@ -78,37 +78,6 @@ Significance threshold for FDR correction.
 Apply log2 transformation to the data before correlation analysis.
 
 
-#### Clustering Method (`cluster_method`)
-
-Method to cluster proteins based on correlation values.
-
-- **Options**: `none`, `kmeans`, `dbscan`
-
-#### Auto-detect Cluster Count (`auto_k`)
-
-Automatically determine optimal number of clusters using elbow method.
-
-
-#### Number of Clusters (`n_clusters`)
-
-Number of clusters for KMeans clustering.
-
-
-#### Max Clusters to Test (`max_k`)
-
-Maximum number of clusters to test for elbow method.
-
-
-#### DBSCAN Epsilon (`dbscan_eps`)
-
-Maximum distance for DBSCAN neighborhood.
-
-
-#### DBSCAN Min Samples (`dbscan_min_samples`)
-
-Minimum samples for DBSCAN core points.
-
-
 ## Outputs
 
 | Name | File | Type | Format | Description |
@@ -116,7 +85,6 @@ Minimum samples for DBSCAN core points.
 | `correlation_results` | `correlation_results.tsv` | data | tsv | Full correlation results with p-values and FDR-corrected q-values. |
 | `significant_results` | `significant_correlations.tsv` | data | tsv | Filtered results showing only significant correlations. |
 | `volcano_plot` | `volcano_plot.html` | html | html | Volcano plot showing correlation vs significance. |
-| `cluster_plot` | `cluster_plot.html` | html | html | Cluster plot showing proteins grouped by correlation clusters. |
 
 ## Sample Annotation
 
@@ -147,16 +115,14 @@ Dependencies are defined in: `requirements.txt`
 This plugin includes example data for testing:
 
 ```yaml
-  imputation: mean
-  cluster_method: kmeans
-  input_file: diann/imputed.data.txt
-  annotation_file: diann/annotation_with_score.txt
   alpha: 0.05
   log2_transform: true
-  auto_k: true
-  max_k: 6
+  input_file: diann/imputed.data.txt
+  annotation_file: diann/annotation_with_score.txt
   index_col: Protein.Group
   target_col: Score
+  grouping_col: Condition
+  imputation: mean
 ```
 
 Load example data by clicking the **Load Example** button in the UI.
