@@ -1,4 +1,4 @@
-"""Pearson correlation analysis with FDR BH correction and cluster detection."""
+"""Pearson correlation analysis with FDR BH correction."""
 
 import os
 
@@ -7,9 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 from scipy import stats
-from sklearn.cluster import KMeans, DBSCAN
 from sklearn.impute import SimpleImputer, KNNImputer
-from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.multitest import multipletests
 
 
@@ -76,7 +74,8 @@ def calculate_pearson_correlation(
     target_col: str,
     imputation: str = "none",
     log2_transform: bool = False,
-    knn_neighbors: int = 5
+    knn_neighbors: int = 5,
+    sample_indices: list = None
 ) -> pd.DataFrame:
     """
     Calculate Pearson correlation for each protein with a target column.
@@ -89,6 +88,7 @@ def calculate_pearson_correlation(
         imputation: Imputation method.
         log2_transform: Whether to apply log2 transformation.
         knn_neighbors: Number of neighbors for KNN imputation.
+        sample_indices: Optional list of sample names to use (for group-based analysis).
 
     Returns:
         DataFrame with Pearson correlation results.
@@ -98,7 +98,11 @@ def calculate_pearson_correlation(
     if target_col not in annotation.columns:
         raise ValueError(f"Target column '{target_col}' not found in annotation file")
 
+    annotation = annotation.copy()
     annotation[target_col] = pd.to_numeric(annotation[target_col], errors='coerce')
+
+    if sample_indices is not None:
+        annotation = annotation[annotation[sample_column_name].isin(sample_indices)]
 
     sample_columns = annotation[sample_column_name].tolist()
     sample_to_target = dict(zip(annotation[sample_column_name], annotation[target_col]))
@@ -117,7 +121,8 @@ def calculate_pearson_correlation(
 
     targets = np.array(targets)
 
-    data = data.set_index(index_col)
+    if index_col in data.columns:
+        data = data.set_index(index_col)
     data_subset = data[valid_samples].copy()
 
     if log2_transform:
@@ -192,97 +197,12 @@ def apply_fdr_correction(
     return results
 
 
-def compute_elbow_inertias(values: np.ndarray, max_k: int = 10):
-    """Compute inertia values for different k values for elbow analysis."""
-    scaler = StandardScaler()
-    scaled_values = scaler.fit_transform(values.reshape(-1, 1))
-
-    max_k = min(max_k, len(values) - 1)
-    k_values = list(range(2, max_k + 1))
-    inertias = []
-
-    for k in k_values:
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        kmeans.fit(scaled_values)
-        inertias.append(kmeans.inertia_)
-
-    return k_values, inertias
-
-
-def find_elbow_point(k_values: list, inertias: list) -> int:
-    """Find the optimal k using the elbow method."""
-    if len(k_values) < 3:
-        return k_values[0]
-
-    k_arr = np.array(k_values)
-    inertia_arr = np.array(inertias)
-
-    k_norm = (k_arr - k_arr.min()) / (k_arr.max() - k_arr.min())
-    inertia_norm = (inertia_arr - inertia_arr.min()) / (inertia_arr.max() - inertia_arr.min() + 1e-10)
-
-    distances = []
-    p1 = np.array([k_norm[0], inertia_norm[0]])
-    p2 = np.array([k_norm[-1], inertia_norm[-1]])
-    line_vec = p2 - p1
-    line_len = np.linalg.norm(line_vec)
-
-    for i in range(len(k_values)):
-        point = np.array([k_norm[i], inertia_norm[i]])
-        dist = np.abs(line_vec[0] * (p1[1] - point[1]) - line_vec[1] * (p1[0] - point[0])) / (line_len + 1e-10)
-        distances.append(dist)
-
-    optimal_idx = np.argmax(distances)
-    return k_values[optimal_idx]
-
-
-def detect_clusters(
-    correlations: np.ndarray,
-    method: str,
-    n_clusters: int = 5,
-    eps: float = 0.5,
-    min_samples: int = 5,
-    auto_k: bool = False,
-    max_k: int = 10
-):
-    """Detect clusters from correlation values."""
-    if method == "none":
-        return None, None
-
-    valid_mask = ~np.isnan(correlations)
-    valid_correlations = correlations[valid_mask]
-
-    if len(valid_correlations) < 3:
-        return None, None
-
-    scaler = StandardScaler()
-    scaled_correlations = scaler.fit_transform(valid_correlations.reshape(-1, 1))
-    optimal_k = None
-
-    if method == "kmeans":
-        if auto_k:
-            k_values, inertias = compute_elbow_inertias(valid_correlations, max_k)
-            optimal_k = find_elbow_point(k_values, inertias)
-            n_clusters = optimal_k
-            print(f"[AUTO] Optimal number of clusters determined: {optimal_k}")
-
-        clusterer = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        valid_labels = clusterer.fit_predict(scaled_correlations)
-    elif method == "dbscan":
-        clusterer = DBSCAN(eps=eps, min_samples=min_samples)
-        valid_labels = clusterer.fit_predict(scaled_correlations)
-    else:
-        return None, None
-
-    labels = np.full(len(correlations), -1)
-    labels[valid_mask] = valid_labels
-
-    return labels, optimal_k
-
-
 def generate_volcano_plot(
     results: pd.DataFrame,
     output_dir: str,
-    alpha: float = 0.05
+    alpha: float = 0.05,
+    suffix: str = "",
+    title_suffix: str = ""
 ):
     """Generate volcano plot (correlation vs -log10 p-value)."""
     plot_df = results.copy()
@@ -300,6 +220,10 @@ def generate_volcano_plot(
         'Not Significant': '#95a5a6'
     }
 
+    title = 'Volcano Plot: Pearson Correlation'
+    if title_suffix:
+        title = f'{title} - {title_suffix}'
+
     fig = px.scatter(
         plot_df,
         x='Correlation',
@@ -313,7 +237,7 @@ def generate_volcano_plot(
             'Q_Value': ':.2e',
             'Status': False
         },
-        title='Volcano Plot: Pearson Correlation'
+        title=title
     )
 
     fig.add_hline(
@@ -335,46 +259,13 @@ def generate_volcano_plot(
 
     fig.update_traces(marker=dict(size=6, opacity=0.7))
 
-    fig.write_html(os.path.join(output_dir, "volcano_plot.html"))
+    filename = f"volcano_plot{suffix}.html" if suffix else "volcano_plot.html"
+    fig.write_html(os.path.join(output_dir, filename))
 
 
-def generate_cluster_plot(
-    results: pd.DataFrame,
-    output_dir: str
-):
-    """Generate scatter plot of correlations colored by cluster."""
-    if 'Cluster' not in results.columns:
-        return
-
-    plot_df = results.copy()
-    plot_df['neg_log10_pvalue'] = -np.log10(plot_df['P_Value'].clip(lower=1e-300))
-
-    fig = px.scatter(
-        plot_df,
-        x='Correlation',
-        y='neg_log10_pvalue',
-        color='Cluster',
-        hover_name='Protein',
-        hover_data={
-            'Correlation': ':.4f',
-            'P_Value': ':.2e',
-            'Q_Value': ':.2e',
-            'Cluster': True
-        },
-        title='Cluster Plot: Proteins by Correlation'
-    )
-
-    fig.update_layout(
-        xaxis_title='Pearson Correlation',
-        yaxis_title='-log₁₀(P-value)',
-        template='plotly_white',
-        width=900,
-        height=700
-    )
-
-    fig.update_traces(marker=dict(size=8, opacity=0.7))
-
-    fig.write_html(os.path.join(output_dir, "cluster_plot.html"))
+def sanitize_filename(name: str) -> str:
+    """Sanitize a string for use as a filename."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in str(name))
 
 
 @click.command()
@@ -382,32 +273,22 @@ def generate_cluster_plot(
 @click.option("--annotation_file", "-a", required=True, help="Path to the annotation file")
 @click.option("--index_col", "-x", required=True, help="Name of the protein identifier column")
 @click.option("--target_col", "-t", required=True, help="Target column name from annotation")
+@click.option("--grouping_col", "-g", default="", help="Column to group samples for separate volcano plots")
 @click.option("--imputation", type=click.Choice(["none", "mean", "median", "zero", "knn"]), default="none", help="Imputation method")
 @click.option("--knn_neighbors", type=int, default=5, help="Number of neighbors for KNN imputation")
 @click.option("--alpha", type=float, default=0.05, help="Significance threshold for FDR")
 @click.option("--log2_transform", "-l", is_flag=True, help="Apply log2 transformation")
-@click.option("--cluster_method", "-m", type=click.Choice(["none", "kmeans", "dbscan"]), default="none", help="Clustering method")
-@click.option("--n_clusters", "-k", type=int, default=5, help="Number of clusters for KMeans")
-@click.option("--dbscan_eps", "-e", type=float, default=0.5, help="DBSCAN epsilon parameter")
-@click.option("--dbscan_min_samples", "-s", type=int, default=5, help="DBSCAN minimum samples")
-@click.option("--auto_k", is_flag=True, help="Auto-determine optimal k using elbow method")
-@click.option("--max_k", type=int, default=10, help="Maximum k to test for elbow method")
 @click.option("--output_dir", "-o", required=True, help="Output directory")
 def main(
     input_file: str,
     annotation_file: str,
     index_col: str,
     target_col: str,
+    grouping_col: str,
     imputation: str,
     knn_neighbors: int,
     alpha: float,
     log2_transform: bool,
-    cluster_method: str,
-    n_clusters: int,
-    dbscan_eps: float,
-    dbscan_min_samples: int,
-    auto_k: bool,
-    max_k: int,
     output_dir: str
 ):
     """Calculate Pearson correlation with FDR BH correction."""
@@ -415,6 +296,7 @@ def main(
 
     data = read_data_file(input_file)
     annotation = read_data_file(annotation_file)
+    sample_column_name = get_sample_column_name(annotation)
 
     results = calculate_pearson_correlation(
         data=data,
@@ -428,25 +310,47 @@ def main(
 
     results = apply_fdr_correction(results, alpha=alpha)
 
-    if cluster_method != "none":
-        cluster_labels, _ = detect_clusters(
-            results['Correlation'].values,
-            method=cluster_method,
-            n_clusters=n_clusters,
-            eps=dbscan_eps,
-            min_samples=dbscan_min_samples,
-            auto_k=auto_k,
-            max_k=max_k
-        )
-        if cluster_labels is not None:
-            results['Cluster'] = [
-                f"Cluster_{label}" if label >= 0 else "Noise"
-                for label in cluster_labels
-            ]
-
     generate_volcano_plot(results, output_dir, alpha=alpha)
-    if cluster_method != "none":
-        generate_cluster_plot(results, output_dir)
+
+    if grouping_col and grouping_col in annotation.columns:
+        groups = annotation[grouping_col].dropna().unique()
+        print(f"Generating volcano plots for {len(groups)} groups in '{grouping_col}'")
+
+        for group in groups:
+            group_samples = annotation[annotation[grouping_col] == group][sample_column_name].tolist()
+
+            try:
+                group_results = calculate_pearson_correlation(
+                    data=data,
+                    annotation=annotation,
+                    index_col=index_col,
+                    target_col=target_col,
+                    imputation=imputation,
+                    log2_transform=log2_transform,
+                    knn_neighbors=knn_neighbors,
+                    sample_indices=group_samples
+                )
+                group_results = apply_fdr_correction(group_results, alpha=alpha)
+
+                suffix = f"_{sanitize_filename(group)}"
+                generate_volcano_plot(
+                    group_results,
+                    output_dir,
+                    alpha=alpha,
+                    suffix=suffix,
+                    title_suffix=str(group)
+                )
+
+                group_results['Group'] = group
+                group_results.to_csv(
+                    os.path.join(output_dir, f"correlation_results_{sanitize_filename(group)}.tsv"),
+                    sep="\t",
+                    index=False
+                )
+                print(f"  Group '{group}': {len(group_samples)} samples, {(group_results['Significant']).sum()} significant")
+
+            except ValueError as e:
+                print(f"  Group '{group}': Skipped - {e}")
 
     results = results.sort_values('P_Value', ascending=True)
 

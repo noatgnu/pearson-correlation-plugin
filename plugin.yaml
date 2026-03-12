@@ -40,6 +40,13 @@ inputs:
     required: true
     description: "Numeric column name from annotation to correlate with."
 
+  - name: "grouping_col"
+    label: "Grouping Column"
+    type: "text"
+    required: false
+    default: ""
+    description: "Column from annotation to group samples for separate volcano plots per group."
+
   - name: "imputation"
     label: "Imputation Method"
     type: "select"
@@ -83,78 +90,6 @@ inputs:
     default: false
     description: "Apply log2 transformation to the data before correlation analysis."
 
-  - name: "cluster_method"
-    label: "Clustering Method"
-    type: "select"
-    required: false
-    default: "none"
-    options:
-      - "none"
-      - "kmeans"
-      - "dbscan"
-    description: "Method to cluster proteins based on correlation values."
-
-  - name: "auto_k"
-    label: "Auto-detect Cluster Count"
-    type: "boolean"
-    default: false
-    description: "Automatically determine optimal number of clusters using elbow method."
-    visibleWhen:
-      field: "cluster_method"
-      equals: "kmeans"
-
-  - name: "n_clusters"
-    label: "Number of Clusters"
-    type: "number"
-    required: false
-    default: 5
-    min: 2
-    max: 20
-    step: 1
-    description: "Number of clusters for KMeans clustering."
-    visibleWhen:
-      field: "cluster_method"
-      equals: "kmeans"
-
-  - name: "max_k"
-    label: "Max Clusters to Test"
-    type: "number"
-    required: false
-    default: 10
-    min: 3
-    max: 30
-    step: 1
-    description: "Maximum number of clusters to test for elbow method."
-    visibleWhen:
-      field: "auto_k"
-      equals: true
-
-  - name: "dbscan_eps"
-    label: "DBSCAN Epsilon"
-    type: "number"
-    required: false
-    default: 0.5
-    min: 0.01
-    max: 10
-    step: 0.01
-    description: "Maximum distance for DBSCAN neighborhood."
-    visibleWhen:
-      field: "cluster_method"
-      equals: "dbscan"
-
-  - name: "dbscan_min_samples"
-    label: "DBSCAN Min Samples"
-    type: "number"
-    required: false
-    default: 5
-    min: 2
-    max: 50
-    step: 1
-    description: "Minimum samples for DBSCAN core points."
-    visibleWhen:
-      field: "cluster_method"
-      equals: "dbscan"
-
 outputs:
   - name: "correlation_results"
     path: "correlation_results.tsv"
@@ -174,12 +109,6 @@ outputs:
     format: "html"
     description: "Volcano plot showing correlation vs significance."
 
-  - name: "cluster_plot"
-    path: "cluster_plot.html"
-    type: "html"
-    format: "html"
-    description: "Cluster plot showing proteins grouped by correlation clusters."
-
 annotation:
   annotationFile: "annotation_file"
 
@@ -189,20 +118,13 @@ execution:
     annotation_file: "--annotation_file"
     index_col: "--index_col"
     target_col: "--target_col"
+    grouping_col: "--grouping_col"
     imputation: "--imputation"
     knn_neighbors: "--knn_neighbors"
     alpha: "--alpha"
     log2_transform:
       flag: "--log2_transform"
       when: "true"
-    cluster_method: "--cluster_method"
-    auto_k:
-      flag: "--auto_k"
-      when: "true"
-    n_clusters: "--n_clusters"
-    max_k: "--max_k"
-    dbscan_eps: "--dbscan_eps"
-    dbscan_min_samples: "--dbscan_min_samples"
   outputDir: "--output_dir"
   requirements:
     python: ">=3.11"
@@ -215,9 +137,7 @@ example:
     annotation_file: "diann/annotation_with_score.txt"
     index_col: "Protein.Group"
     target_col: "Score"
+    grouping_col: "Condition"
     imputation: "mean"
     alpha: 0.05
     log2_transform: true
-    cluster_method: "kmeans"
-    auto_k: true
-    max_k: 6
