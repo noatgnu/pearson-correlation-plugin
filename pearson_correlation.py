@@ -126,41 +126,51 @@ def calculate_pearson_correlation(
 
     data_subset = impute_data(data_subset, imputation, knn_neighbors)
 
-    results_list = []
-    for protein, values in data_subset.iterrows():
-        x = values.values.astype(float)
-        y = targets.astype(float)
+    X = data_subset.values.astype(float)
+    y = targets.astype(float)
+    proteins = data_subset.index.tolist()
+    n_proteins = X.shape[0]
+    n_samples = X.shape[1]
 
-        mask = ~np.isnan(x) & ~np.isnan(y)
-        x_valid = x[mask]
-        y_valid = y[mask]
-        n = len(x_valid)
+    valid_mask = ~np.isnan(y)
+    y_valid = y[valid_mask]
+    X_valid = X[:, valid_mask]
+    n_valid = valid_mask.sum()
 
-        if n >= 3:
-            if np.std(x_valid) == 0 or np.std(y_valid) == 0:
-                results_list.append({
-                    'Protein': protein,
-                    'Correlation': np.nan,
-                    'P_Value': np.nan,
-                    'N_Samples': n
-                })
-            else:
-                r, p = stats.pearsonr(x_valid, y_valid)
-                results_list.append({
-                    'Protein': protein,
-                    'Correlation': r,
-                    'P_Value': p,
-                    'N_Samples': n
-                })
-        else:
-            results_list.append({
-                'Protein': protein,
-                'Correlation': np.nan,
-                'P_Value': np.nan,
-                'N_Samples': n
-            })
+    if n_valid < 3:
+        return pd.DataFrame({
+            'Protein': proteins,
+            'Correlation': [np.nan] * n_proteins,
+            'P_Value': [np.nan] * n_proteins,
+            'N_Samples': [n_valid] * n_proteins
+        })
 
-    return pd.DataFrame(results_list)
+    y_mean = np.mean(y_valid)
+    y_centered = y_valid - y_mean
+    y_std = np.std(y_valid, ddof=0)
+
+    X_mean = np.mean(X_valid, axis=1, keepdims=True)
+    X_centered = X_valid - X_mean
+    X_std = np.std(X_valid, axis=1, ddof=0)
+
+    valid_std = X_std > 0
+    correlations = np.full(n_proteins, np.nan)
+    correlations[valid_std] = np.sum(X_centered[valid_std] * y_centered, axis=1) / (n_valid * X_std[valid_std] * y_std)
+    correlations = np.clip(correlations, -1.0, 1.0)
+
+    pvalues = np.full(n_proteins, np.nan)
+    valid_corr = valid_std & ~np.isnan(correlations)
+    if np.any(valid_corr):
+        r_valid = correlations[valid_corr]
+        t_stat = r_valid * np.sqrt((n_valid - 2) / (1 - r_valid**2 + 1e-10))
+        pvalues[valid_corr] = 2 * stats.t.sf(np.abs(t_stat), df=n_valid - 2)
+
+    return pd.DataFrame({
+        'Protein': proteins,
+        'Correlation': correlations,
+        'P_Value': pvalues,
+        'N_Samples': [n_valid] * n_proteins
+    })
 
 
 def apply_fdr_correction(
