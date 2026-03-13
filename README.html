@@ -269,6 +269,20 @@
 <td>html</td>
 <td>Volcano plot showing correlation vs significance.</td>
 </tr>
+<tr>
+<td><code>scatter_plots</code></td>
+<td><code>scatter_plots.html</code></td>
+<td>html</td>
+<td>html</td>
+<td>Scatter plots showing protein abundance vs target for top significant proteins.</td>
+</tr>
+<tr>
+<td><code>ranked_correlations</code></td>
+<td><code>ranked_correlations.html</code></td>
+<td>html</td>
+<td>html</td>
+<td>Bar plot showing proteins ranked by correlation coefficient.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="sample-annotation">Sample Annotation</h2>
@@ -296,14 +310,14 @@
 </blockquote>
 <h2 id="example-data">Example Data</h2>
 <p>This plugin includes example data for testing:</p>
-<pre><code class="language-yaml">  log2_transform: true
-  input_file: diann/imputed.data.txt
-  annotation_file: diann/annotation_with_score.txt
-  index_col: Protein.Group
+<pre><code class="language-yaml">  index_col: Protein.Group
   target_col: Score
   grouping_col: Condition
   imputation: mean
   alpha: 0.05
+  log2_transform: true
+  input_file: diann/imputed.data.txt
+  annotation_file: diann/annotation_with_score.txt
 </code></pre>
 <p>Load example data by clicking the <strong>Load Example</strong> button in the UI.</p>
 <h2 id="usage">Usage</h2>

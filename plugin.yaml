@@ -109,6 +109,18 @@ outputs:
     format: "html"
     description: "Volcano plot showing correlation vs significance."
 
+  - name: "scatter_plots"
+    path: "scatter_plots.html"
+    type: "html"
+    format: "html"
+    description: "Scatter plots showing protein abundance vs target for top significant proteins."
+
+  - name: "ranked_correlations"
+    path: "ranked_correlations.html"
+    type: "html"
+    format: "html"
+    description: "Bar plot showing proteins ranked by correlation coefficient."
+
 annotation:
   annotationFile: "annotation_file"
 

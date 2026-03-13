@@ -6,6 +6,8 @@ import click
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy import stats
 from sklearn.impute import SimpleImputer, KNNImputer
 from statsmodels.stats.multitest import multipletests
@@ -40,16 +42,9 @@ def impute_data(
         knn_neighbors: Number of neighbors for KNN imputation.
 
     Returns:
-        DataFrame with imputed values.
-
-    Raises:
-        ValueError: If method is 'none' and NaN values exist.
+        DataFrame with (potentially) imputed values.
     """
     if method == "none":
-        if data.isna().any().any():
-            raise ValueError(
-                "Data contains NaN values. Please select an imputation method or provide pre-imputed data."
-            )
         return data
 
     if method == "knn":
@@ -131,32 +126,41 @@ def calculate_pearson_correlation(
 
     data_subset = impute_data(data_subset, imputation, knn_neighbors)
 
-    data_matrix = data_subset.values.astype(float)
-    n_samples = len(targets)
+    results_list = []
+    for protein, values in data_subset.iterrows():
+        x = values.values.astype(float)
+        y = targets.astype(float)
 
-    mean_x = data_matrix.mean(axis=1, keepdims=True)
-    mean_y = targets.mean()
+        mask = ~np.isnan(x) & ~np.isnan(y)
+        x_valid = x[mask]
+        y_valid = y[mask]
+        n = len(x_valid)
 
-    x_centered = data_matrix - mean_x
-    y_centered = targets - mean_y
+        if n >= 3:
+            if np.std(x_valid) == 0 or np.std(y_valid) == 0:
+                results_list.append({
+                    'Protein': protein,
+                    'Correlation': np.nan,
+                    'P_Value': np.nan,
+                    'N_Samples': n
+                })
+            else:
+                r, p = stats.pearsonr(x_valid, y_valid)
+                results_list.append({
+                    'Protein': protein,
+                    'Correlation': r,
+                    'P_Value': p,
+                    'N_Samples': n
+                })
+        else:
+            results_list.append({
+                'Protein': protein,
+                'Correlation': np.nan,
+                'P_Value': np.nan,
+                'N_Samples': n
+            })
 
-    numerator = (x_centered * y_centered).sum(axis=1)
-    denominator = np.sqrt((x_centered ** 2).sum(axis=1) * (y_centered ** 2).sum())
-
-    with np.errstate(divide='ignore', invalid='ignore'):
-        correlations = numerator / denominator
-
-    t_stat = correlations * np.sqrt((n_samples - 2) / (1 - correlations ** 2))
-    p_values = 2 * stats.t.sf(np.abs(t_stat), n_samples - 2)
-
-    results = pd.DataFrame({
-        'Protein': data_subset.index,
-        'Correlation': correlations,
-        'P_Value': p_values,
-        'N_Samples': n_samples
-    })
-
-    return results
+    return pd.DataFrame(results_list)
 
 
 def apply_fdr_correction(
@@ -195,6 +199,146 @@ def apply_fdr_correction(
     results.loc[valid_mask, 'Significant'] = rejected
 
     return results
+
+
+def generate_scatter_plots(
+    data: pd.DataFrame,
+    annotation: pd.DataFrame,
+    results: pd.DataFrame,
+    index_col: str,
+    target_col: str,
+    output_dir: str,
+    top_n: int = 9
+):
+    """Generate scatter plots for top significant proteins."""
+    sig_results = results[results['Significant'] == True].nsmallest(top_n, 'P_Value')
+
+    if len(sig_results) == 0:
+        return
+
+    sample_col = None
+    for col in annotation.columns:
+        if col.lower() == 'sample':
+            sample_col = col
+            break
+
+    if sample_col is None:
+        return
+
+    if index_col in data.columns:
+        data = data.set_index(index_col)
+
+    n_plots = len(sig_results)
+    n_cols = min(3, n_plots)
+    n_rows = (n_plots + n_cols - 1) // n_cols
+
+    fig = make_subplots(
+        rows=n_rows, cols=n_cols,
+        subplot_titles=[str(p)[:30] for p in sig_results['Protein'].tolist()]
+    )
+
+    for idx, (_, row) in enumerate(sig_results.iterrows()):
+        protein = row['Protein']
+        r_val = row['Correlation']
+        p_val = row['P_Value']
+        r_idx = idx // n_cols + 1
+        c_idx = idx % n_cols + 1
+
+        if protein not in data.index:
+            continue
+
+        protein_values = data.loc[protein]
+
+        plot_data = []
+        for _, ann_row in annotation.iterrows():
+            sample = ann_row[sample_col]
+            if sample in protein_values.index:
+                val = protein_values[sample]
+                target_val = ann_row[target_col]
+                if pd.notna(val) and pd.notna(target_val):
+                    plot_data.append({'abundance': val, 'target': float(target_val)})
+
+        if not plot_data:
+            continue
+
+        plot_df = pd.DataFrame(plot_data)
+
+        fig.add_trace(
+            go.Scatter(
+                x=plot_df['target'],
+                y=plot_df['abundance'],
+                mode='markers',
+                marker=dict(size=8, opacity=0.7, color='#3498db'),
+                name=str(protein)[:20],
+                showlegend=False,
+                hovertemplate=f'r={r_val:.3f}, p={p_val:.2e}<extra></extra>'
+            ),
+            row=r_idx, col=c_idx
+        )
+
+        if len(plot_df) >= 2:
+            z = np.polyfit(plot_df['target'], plot_df['abundance'], 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(plot_df['target'].min(), plot_df['target'].max(), 100)
+            fig.add_trace(
+                go.Scatter(
+                    x=x_line,
+                    y=p(x_line),
+                    mode='lines',
+                    line=dict(color='#e74c3c', width=2),
+                    showlegend=False
+                ),
+                row=r_idx, col=c_idx
+            )
+
+    fig.update_layout(
+        title=f'Top {len(sig_results)} Significant Correlations',
+        template='plotly_white',
+        height=350 * n_rows,
+        width=350 * n_cols
+    )
+
+    fig.write_html(os.path.join(output_dir, 'scatter_plots.html'))
+
+
+def generate_ranked_bar_plot(
+    results: pd.DataFrame,
+    output_dir: str,
+    top_n: int = 30
+):
+    """Generate ranked bar plot of top correlations."""
+    valid_results = results.dropna(subset=['Correlation', 'P_Value'])
+
+    pos_top = valid_results.nlargest(top_n // 2, 'Correlation')
+    neg_top = valid_results.nsmallest(top_n // 2, 'Correlation')
+    plot_df = pd.concat([pos_top, neg_top]).drop_duplicates()
+    plot_df = plot_df.sort_values('Correlation', ascending=True)
+
+    if len(plot_df) == 0:
+        return
+
+    colors = ['#e74c3c' if x > 0 else '#3498db' for x in plot_df['Correlation']]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        y=[str(p)[:40] for p in plot_df['Protein']],
+        x=plot_df['Correlation'],
+        orientation='h',
+        marker_color=colors,
+        hovertemplate='%{y}<br>r=%{x:.4f}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=f'Top {len(plot_df)} Correlations (Positive and Negative)',
+        xaxis_title='Pearson Correlation',
+        yaxis_title='Protein',
+        template='plotly_white',
+        height=max(400, len(plot_df) * 25),
+        width=800
+    )
+
+    fig.write_html(os.path.join(output_dir, 'ranked_correlations.html'))
 
 
 def generate_volcano_plot(
@@ -311,6 +455,8 @@ def main(
     results = apply_fdr_correction(results, alpha=alpha)
 
     generate_volcano_plot(results, output_dir, alpha=alpha)
+    generate_ranked_bar_plot(results, output_dir)
+    generate_scatter_plots(data, annotation, results, index_col, target_col, output_dir)
 
     if grouping_col and grouping_col in annotation.columns:
         groups = annotation[grouping_col].dropna().unique()

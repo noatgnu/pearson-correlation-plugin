@@ -85,6 +85,8 @@ Apply log2 transformation to the data before correlation analysis.
 | `correlation_results` | `correlation_results.tsv` | data | tsv | Full correlation results with p-values and FDR-corrected q-values. |
 | `significant_results` | `significant_correlations.tsv` | data | tsv | Filtered results showing only significant correlations. |
 | `volcano_plot` | `volcano_plot.html` | html | html | Volcano plot showing correlation vs significance. |
+| `scatter_plots` | `scatter_plots.html` | html | html | Scatter plots showing protein abundance vs target for top significant proteins. |
+| `ranked_correlations` | `ranked_correlations.html` | html | html | Bar plot showing proteins ranked by correlation coefficient. |
 
 ## Sample Annotation
 
@@ -115,14 +117,14 @@ Dependencies are defined in: `requirements.txt`
 This plugin includes example data for testing:
 
 ```yaml
-  alpha: 0.05
-  log2_transform: true
-  input_file: diann/imputed.data.txt
   annotation_file: diann/annotation_with_score.txt
   index_col: Protein.Group
   target_col: Score
   grouping_col: Condition
   imputation: mean
+  alpha: 0.05
+  log2_transform: true
+  input_file: diann/imputed.data.txt
 ```
 
 Load example data by clicking the **Load Example** button in the UI.
