@@ -185,7 +185,7 @@ def apply_fdr_correction(
         alpha: Significance threshold.
 
     Returns:
-        DataFrame with Q_Value and Significant columns added.
+        DataFrame with Adjusted_P_Value and Significant columns added.
     """
     results = results.copy()
 
@@ -193,19 +193,19 @@ def apply_fdr_correction(
     valid_pvalues = results.loc[valid_mask, 'P_Value'].values
 
     if len(valid_pvalues) == 0:
-        results['Q_Value'] = np.nan
+        results['Adjusted_P_Value'] = np.nan
         results['Significant'] = False
         return results
 
-    rejected, qvalues, _, _ = multipletests(
+    rejected, adj_pvalues, _, _ = multipletests(
         valid_pvalues,
         alpha=alpha,
         method='fdr_bh'
     )
 
-    results['Q_Value'] = np.nan
+    results['Adjusted_P_Value'] = np.nan
     results['Significant'] = False
-    results.loc[valid_mask, 'Q_Value'] = qvalues
+    results.loc[valid_mask, 'Adjusted_P_Value'] = adj_pvalues
     results.loc[valid_mask, 'Significant'] = rejected
 
     return results
@@ -221,7 +221,7 @@ def generate_scatter_plots(
     top_n: int = 9
 ):
     """Generate scatter plots for top significant proteins."""
-    sig_results = results[results['Significant'] == True].nsmallest(top_n, 'P_Value')
+    sig_results = results[results['Significant'] == True].nsmallest(top_n, 'Adjusted_P_Value')
 
     if len(sig_results) == 0:
         return
@@ -250,7 +250,7 @@ def generate_scatter_plots(
     for idx, (_, row) in enumerate(sig_results.iterrows()):
         protein = row['Protein']
         r_val = row['Correlation']
-        p_val = row['P_Value']
+        adj_p_val = row['Adjusted_P_Value']
         r_idx = idx // n_cols + 1
         c_idx = idx % n_cols + 1
 
@@ -281,7 +281,7 @@ def generate_scatter_plots(
                 marker=dict(size=8, opacity=0.7, color='#3498db'),
                 name=str(protein)[:20],
                 showlegend=False,
-                hovertemplate=f'r={r_val:.3f}, p={p_val:.2e}<extra></extra>'
+                hovertemplate=f'r={r_val:.3f}, Adjusted p={adj_p_val:.2e}<extra></extra>'
             ),
             row=r_idx, col=c_idx
         )
@@ -302,7 +302,7 @@ def generate_scatter_plots(
             )
 
     fig.update_layout(
-        title=f'Top {len(sig_results)} Significant Correlations',
+        title=f'Top {len(sig_results)} Significant Correlations (Adjusted P-values)',
         template='plotly_white',
         height=350 * n_rows,
         width=350 * n_cols
@@ -358,9 +358,9 @@ def generate_volcano_plot(
     suffix: str = "",
     title_suffix: str = ""
 ):
-    """Generate volcano plot (correlation vs -log10 p-value)."""
+    """Generate volcano plot (correlation vs -log10 adjusted p-value)."""
     plot_df = results.copy()
-    plot_df['neg_log10_pvalue'] = -np.log10(plot_df['P_Value'].clip(lower=1e-300))
+    plot_df['neg_log10_adj_pvalue'] = -np.log10(plot_df['Adjusted_P_Value'].clip(lower=1e-300))
 
     plot_df['Status'] = np.where(
         plot_df['Significant'],
@@ -381,14 +381,14 @@ def generate_volcano_plot(
     fig = px.scatter(
         plot_df,
         x='Correlation',
-        y='neg_log10_pvalue',
+        y='neg_log10_adj_pvalue',
         color='Status',
         color_discrete_map=color_map,
         hover_name='Protein',
         hover_data={
             'Correlation': ':.4f',
             'P_Value': ':.2e',
-            'Q_Value': ':.2e',
+            'Adjusted_P_Value': ':.2e',
             'Status': False
         },
         title=title
@@ -398,14 +398,14 @@ def generate_volcano_plot(
         y=-np.log10(alpha),
         line_dash="dash",
         line_color="gray",
-        annotation_text=f"p = {alpha}"
+        annotation_text=f"Adjusted p = {alpha}"
     )
 
     fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
 
     fig.update_layout(
         xaxis_title='Pearson Correlation',
-        yaxis_title='-log10(P-value)',
+        yaxis_title='-log10(Adjusted P-value)',
         template='plotly_white',
         width=900,
         height=700
@@ -450,6 +450,17 @@ def main(
 
     data = read_data_file(input_file)
     annotation = read_data_file(annotation_file)
+    
+    # Filter annotation: only keep samples that have a value in the target column
+    if target_col in annotation.columns:
+        # Convert to numeric to find missing values
+        annotation[target_col] = pd.to_numeric(annotation[target_col], errors='coerce')
+        original_len = len(annotation)
+        annotation = annotation.dropna(subset=[target_col])
+        filtered_len = len(annotation)
+        if original_len > filtered_len:
+            print(f"Dropped {original_len - filtered_len} samples from annotation without values in '{target_col}'")
+
     sample_column_name = get_sample_column_name(annotation)
 
     results = calculate_pearson_correlation(
