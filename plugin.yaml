@@ -151,7 +151,7 @@ execution:
 example:
   enabled: true
   values:
-    input_file: "diann/imputed.data.txt"
+    input_file: "diann/imputed.data.small.txt"
     annotation_file: "diann/annotation_with_score.txt"
     index_col: "Protein.Group"
     target_col: "Score"
