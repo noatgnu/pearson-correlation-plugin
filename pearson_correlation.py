@@ -356,14 +356,36 @@ def generate_volcano_plot(
     output_dir: str,
     alpha: float = 0.05,
     suffix: str = "",
-    title_suffix: str = ""
+    title_suffix: str = "",
+    use_adjusted_pvalue: bool = True
 ):
-    """Generate volcano plot (correlation vs -log10 adjusted p-value)."""
+    """
+    Generate volcano plot (correlation vs -log10 p-value).
+
+    :param results: DataFrame with correlation results.
+    :param output_dir: Output directory path.
+    :param alpha: Significance threshold.
+    :param suffix: Filename suffix.
+    :param title_suffix: Title suffix for the plot.
+    :param use_adjusted_pvalue: If True, use Adjusted_P_Value for cutoff; if False, use P_Value.
+    """
     plot_df = results.copy()
-    plot_df['neg_log10_adj_pvalue'] = -np.log10(plot_df['Adjusted_P_Value'].clip(lower=1e-300))
+
+    if use_adjusted_pvalue:
+        pvalue_col = 'Adjusted_P_Value'
+        y_label = '-log10(Adjusted P-value)'
+        plot_type = 'adjusted'
+        significance_col = plot_df['Adjusted_P_Value'].fillna(1)
+    else:
+        pvalue_col = 'P_Value'
+        y_label = '-log10(P-value)'
+        plot_type = 'raw'
+        significance_col = plot_df['P_Value'].fillna(1)
+
+    plot_df['neg_log10_pvalue'] = -np.log10(plot_df[pvalue_col].clip(lower=1e-300))
 
     plot_df['Status'] = np.where(
-        plot_df['Significant'],
+        significance_col < alpha,
         np.where(plot_df['Correlation'] > 0, 'Positive', 'Negative'),
         'Not Significant'
     )
@@ -374,14 +396,15 @@ def generate_volcano_plot(
         'Not Significant': '#95a5a6'
     }
 
-    title = 'Volcano Plot: Pearson Correlation'
+    pvalue_label = "Adjusted P-value" if use_adjusted_pvalue else "P-value"
+    title = f'Volcano Plot: Pearson Correlation ({pvalue_label} cutoff)'
     if title_suffix:
         title = f'{title} - {title_suffix}'
 
     fig = px.scatter(
         plot_df,
         x='Correlation',
-        y='neg_log10_adj_pvalue',
+        y='neg_log10_pvalue',
         color='Status',
         color_discrete_map=color_map,
         hover_name='Protein',
@@ -398,14 +421,14 @@ def generate_volcano_plot(
         y=-np.log10(alpha),
         line_dash="dash",
         line_color="gray",
-        annotation_text=f"Adjusted p = {alpha}"
+        annotation_text=f"{pvalue_label} = {alpha}"
     )
 
     fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
 
     fig.update_layout(
         xaxis_title='Pearson Correlation',
-        yaxis_title='-log10(Adjusted P-value)',
+        yaxis_title=y_label,
         template='plotly_white',
         width=900,
         height=700
@@ -413,7 +436,10 @@ def generate_volcano_plot(
 
     fig.update_traces(marker=dict(size=6, opacity=0.7))
 
-    filename = f"volcano_plot{suffix}.html" if suffix else "volcano_plot.html"
+    if suffix:
+        filename = f"volcano_plot_{plot_type}{suffix}.html"
+    else:
+        filename = f"volcano_plot_{plot_type}.html"
     fig.write_html(os.path.join(output_dir, filename))
 
 
@@ -475,7 +501,8 @@ def main(
 
     results = apply_fdr_correction(results, alpha=alpha)
 
-    generate_volcano_plot(results, output_dir, alpha=alpha)
+    generate_volcano_plot(results, output_dir, alpha=alpha, use_adjusted_pvalue=True)
+    generate_volcano_plot(results, output_dir, alpha=alpha, use_adjusted_pvalue=False)
     generate_ranked_bar_plot(results, output_dir)
     generate_scatter_plots(data, annotation, results, index_col, target_col, output_dir)
 
@@ -505,7 +532,16 @@ def main(
                     output_dir,
                     alpha=alpha,
                     suffix=suffix,
-                    title_suffix=str(group)
+                    title_suffix=str(group),
+                    use_adjusted_pvalue=True
+                )
+                generate_volcano_plot(
+                    group_results,
+                    output_dir,
+                    alpha=alpha,
+                    suffix=suffix,
+                    title_suffix=str(group),
+                    use_adjusted_pvalue=False
                 )
 
                 group_results['Group'] = group

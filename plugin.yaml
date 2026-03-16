@@ -103,11 +103,17 @@ outputs:
     format: "tsv"
     description: "Filtered results showing only significant correlations."
 
-  - name: "volcano_plot"
-    path: "volcano_plot.html"
+  - name: "volcano_plot_adjusted"
+    path: "volcano_plot_adjusted.html"
     type: "html"
     format: "html"
-    description: "Volcano plot showing correlation vs significance."
+    description: "Volcano plot using FDR-adjusted p-values for significance cutoff."
+
+  - name: "volcano_plot_raw"
+    path: "volcano_plot_raw.html"
+    type: "html"
+    format: "html"
+    description: "Volcano plot using raw p-values for significance cutoff."
 
   - name: "scatter_plots"
     path: "scatter_plots.html"
